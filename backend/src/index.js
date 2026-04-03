@@ -197,7 +197,7 @@ Format the response as a clean list with clear headings.
 app.get('/test/youtube', async (req, res) => {
     try {
         console.log('Fetching YouTube stats...');
-        const youtubeData = await fetchYouTubeStats();
+        const youtubeData = await fetchYouTubeStats(CHANNEL_ID);
         
         console.log('Syncing to Xano...');
         const xanoResult = await syncToXano(youtubeData);
