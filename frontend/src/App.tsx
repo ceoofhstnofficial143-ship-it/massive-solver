@@ -33,6 +33,7 @@ function Login({ onLogin }: { onLogin: () => void }) {
 }
 
 // Dashboard component
+function Dashboard() {
   const [channelId, setChannelId] = useState('UCwTMRMFBYAoTAmhHO6s3Mag'); // Phase 2: multi-channel
   const [stats, setStats] = useState({ views: 0, subscribers: 0, videoCount: 0, topVideo: null, lastUpdated: null });
   const [recommendations, setRecommendations] = useState('');
