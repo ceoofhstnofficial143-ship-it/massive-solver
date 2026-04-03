@@ -26,9 +26,9 @@ app.get('/ping', (req, res) => {
     res.send('pong');
 });
 
-// Root route
+// Root health check endpoint for Render
 app.get('/', (req, res) => {
-    res.send('Massive Solver API is running. Use /ping, /analyze, /api/stats');
+    res.status(200).send('OK');
 });
 
 // Fetch YouTube channel stats (works with API key - no OAuth)
@@ -262,8 +262,8 @@ app.post('/api/sync', async (req, res) => {
     }
 });
 
-app.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 Server running on port ${PORT}`);
-    console.log(`📊 Test sync: http://localhost:${PORT}/test/youtube`);
-    console.log(`🧠 AI analysis: http://localhost:${PORT}/analyze`);
+app.listen(process.env.PORT || 5000, '0.0.0.0', () => {
+    console.log(`🚀 Server running on port ${process.env.PORT || 5000}`);
+    console.log(`📊 Test sync: http://localhost:${process.env.PORT || 5000}/test/youtube`);
+    console.log(`🧠 AI analysis: http://localhost:${process.env.PORT || 5000}/analyze`);
 });
