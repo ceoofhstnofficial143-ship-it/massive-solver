@@ -251,7 +251,7 @@ app.post('/api/sync', async (req, res) => {
     }
 });
 
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 Server running on port ${PORT}`);
     console.log(`📊 Test sync: http://localhost:${PORT}/test/youtube`);
     console.log(`🧠 AI analysis: http://localhost:${PORT}/analyze`);
