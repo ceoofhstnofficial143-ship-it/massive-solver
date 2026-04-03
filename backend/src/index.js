@@ -228,7 +228,7 @@ app.get('/api/stats', async (req, res) => {
             const latest = response.data[0];
             // For MVP, we don't have real subscriber count. Fetch from YouTube live.
             // Let's add a live fetch for subscribers
-            const youtubeStats = await fetchYouTubeStats(); // reuse existing function
+            const youtubeStats = await fetchYouTubeStats(latest.channel_id); // Pass the channel_id from Xano record
             res.json({
                 views: latest.views,
                 subscribers: youtubeStats.subscribers, // real subscriber count from YouTube API
