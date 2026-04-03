@@ -224,23 +224,24 @@ app.get('/api/stats', async (req, res) => {
             headers: { 'Authorization': `Bearer ${XANO_API_KEY}` }
         });
         
-        if (response.data && response.data.length > 0) {
-            const latest = response.data[0];
-            // For MVP, we don't have real subscriber count. Fetch from YouTube live.
-            // Let's add a live fetch for subscribers
-            const targetChannelId = latest.channel_id || CHANNEL_ID; // Fallback to your default
-            const youtubeStats = await fetchYouTubeStats(targetChannelId); 
+        let targetChannelId = CHANNEL_ID; // default
+        let latest = null;
 
-            res.json({
-                views: latest.views,
-                subscribers: youtubeStats.subscribers, // real subscriber count from YouTube API
-                videoCount: youtubeStats.video_count,
-                topVideo: latest.top_video_title || 'None',
-                lastUpdated: latest.created_at
-            });
-        } else {
-            res.json({ views: 0, subscribers: 0, videoCount: 0, topVideo: null, lastUpdated: null });
+        if (response.data && response.data.length > 0) {
+            latest = response.data[0];
+            targetChannelId = latest.channel_id || CHANNEL_ID;
         }
+
+        console.log(`📊 Fetching LIVE stats for: ${targetChannelId}`);
+        const youtubeStats = await fetchYouTubeStats(targetChannelId); 
+
+        res.json({
+            views: youtubeStats.views, // use live views for accuracy
+            subscribers: youtubeStats.subscribers, 
+            videoCount: youtubeStats.video_count,
+            topVideo: youtubeStats.top_videos[0]?.title || 'None',
+            lastUpdated: latest ? latest.created_at : new Date().toISOString()
+        });
     } catch (error) {
         console.error('Stats error:', error.message);
         res.status(500).json({ error: 'Failed to fetch stats' });
