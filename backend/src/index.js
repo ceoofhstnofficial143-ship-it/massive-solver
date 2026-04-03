@@ -26,6 +26,11 @@ app.get('/ping', (req, res) => {
     res.send('pong');
 });
 
+// Root route
+app.get('/', (req, res) => {
+    res.send('Massive Solver API is running. Use /ping, /analyze, /api/stats');
+});
+
 // Fetch YouTube channel stats (works with API key - no OAuth)
 async function fetchYouTubeStats() {
     try {
