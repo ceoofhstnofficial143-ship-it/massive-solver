@@ -11,9 +11,13 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "@google/generative-ai": "^0.24.1",
+    "axios": "^1.14.0",
     "cors": "^2.8.6",
     "dotenv": "^17.4.0",
-    "express": "^5.2.1"
+    "express": "^5.2.1",
+    "firebase-admin": "^13.7.0",
+    "openai": "^6.33.0"
   },
   "devDependencies": {
     "@types/cors": "^2.8.19",
