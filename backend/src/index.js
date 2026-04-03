@@ -32,12 +32,12 @@ app.get('/', (req, res) => {
 });
 
 // Fetch YouTube channel stats (works with API key - no OAuth)
-async function fetchYouTubeStats() {
+async function fetchYouTubeStats(channelId) {
     try {
         const channelRes = await axios.get('https://www.googleapis.com/youtube/v3/channels', {
             params: {
                 part: 'statistics',
-                id: CHANNEL_ID,
+                id: channelId,
                 key: YOUTUBE_API_KEY
             }
         });
@@ -47,7 +47,7 @@ async function fetchYouTubeStats() {
         const videosRes = await axios.get('https://www.googleapis.com/youtube/v3/search', {
             params: {
                 part: 'snippet',
-                channelId: CHANNEL_ID,
+                channelId: channelId,
                 maxResults: 3,
                 order: 'viewCount',
                 type: 'video',
@@ -62,7 +62,7 @@ async function fetchYouTubeStats() {
         }));
 
         return {
-            channel_id: CHANNEL_ID,
+            channel_id: channelId,
             views: parseInt(stats.viewCount) || 0,
             subscribers: parseInt(stats.subscriberCount) || 0,
             video_count: parseInt(stats.videoCount) || 0,
@@ -83,6 +83,7 @@ async function syncToXano(data) {
         const payload = {
             user: 1,
             date: new Date().toISOString().split('T')[0],
+            channel_id: data.channel_id, // Added for Phase 2
             views: data.views,
             subscribers_gained: 0,
             subscribers_lost: 0,
@@ -246,8 +247,11 @@ app.get('/api/stats', async (req, res) => {
 
 // POST /api/sync – triggers a fresh YouTube sync
 app.post('/api/sync', async (req, res) => {
+    const { channelId } = req.body;
+    if (!channelId) return res.status(400).json({ error: 'channelId required' });
     try {
-        const youtubeData = await fetchYouTubeStats();
+        console.log(`Syncing channel: ${channelId}`);
+        const youtubeData = await fetchYouTubeStats(channelId);
         const xanoResult = await syncToXano(youtubeData);
         res.json({ success: true, message: 'Sync completed', data: xanoResult });
     } catch (error) {

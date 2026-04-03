@@ -33,7 +33,7 @@ function Login({ onLogin }: { onLogin: () => void }) {
 }
 
 // Dashboard component
-function Dashboard() {
+  const [channelId, setChannelId] = useState('UCwTMRMFBYAoTAmhHO6s3Mag'); // Phase 2: multi-channel
   const [stats, setStats] = useState({ views: 0, subscribers: 0, videoCount: 0, topVideo: null, lastUpdated: null });
   const [recommendations, setRecommendations] = useState('');
   const [loading, setLoading] = useState({ stats: true, ai: true, sync: false });
@@ -61,10 +61,10 @@ function Dashboard() {
     }
   };
 
-  const handleSync = async () => {
+  const handleSync = async (targetChannelId: string) => {
     setLoading(prev => ({ ...prev, sync: true }));
     try {
-      await axios.post(`${import.meta.env.VITE_API_URL}/api/sync`);
+      await axios.post(`${import.meta.env.VITE_API_URL}/api/sync`, { channelId: targetChannelId });
       await fetchStats();  // refresh stats after sync
       await fetchAI();     // refresh AI recommendations
     } catch (err) {
@@ -94,12 +94,33 @@ function Dashboard() {
         <div className="flex justify-between items-center mb-8">
           <h1 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-400">Massive Solver</h1>
           <button
-            onClick={handleSync}
+            onClick={() => handleSync(channelId)}
             disabled={loading.sync}
             className="px-4 py-2 bg-white/20 rounded-lg hover:bg-white/30 transition disabled:opacity-50"
           >
             {loading.sync ? 'Syncing...' : '🔄 Refresh Data'}
           </button>
+        </div>
+
+        {/* Phase 2: Channel ID Input */}
+        <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20 mb-8">
+          <label className="block text-gray-300 mb-2 font-medium">YouTube Channel ID</label>
+          <div className="flex gap-4">
+            <input
+              type="text"
+              value={channelId}
+              onChange={(e) => setChannelId(e.target.value)}
+              className="flex-1 px-4 py-2 rounded-lg bg-white/20 border border-white/30 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500"
+              placeholder="Enter YouTube Channel ID"
+            />
+            <button
+              onClick={() => handleSync(channelId)}
+              disabled={loading.sync}
+              className="px-6 py-2 bg-gradient-to-r from-purple-600 to-pink-600 rounded-lg text-white font-semibold hover:opacity-90 transition disabled:opacity-50"
+            >
+              Sync Channel
+            </button>
+          </div>
         </div>
 
         {error && <div className="bg-red-500/20 border border-red-500 rounded-lg p-3 mb-6 text-red-200">{error}</div>}
