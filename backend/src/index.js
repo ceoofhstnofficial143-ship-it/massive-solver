@@ -171,7 +171,7 @@ Format the response as a clean list with clear headings.
         console.log('🤖 Sending data to Gemini for analysis...');
 
         // --- 3. Call the Gemini API ---
-        const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+        const model = genAI.getGenerativeModel({ model: "gemma-3-12b-it" });
         const result = await model.generateContent(prompt);
         const recommendations = result.response.text();
 
