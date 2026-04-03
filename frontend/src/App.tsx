@@ -41,7 +41,7 @@ function Dashboard() {
 
   const fetchStats = async () => {
     try {
-      const res = await axios.get('http://localhost:5000/api/stats');
+      const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/stats`);
       setStats(res.data);
     } catch (err) {
       setError('Failed to load stats');
@@ -52,7 +52,7 @@ function Dashboard() {
 
   const fetchAI = async () => {
     try {
-      const res = await axios.get('http://localhost:5000/analyze');
+      const res = await axios.get(`${import.meta.env.VITE_API_URL}/analyze`);
       setRecommendations(res.data.recommendations);
     } catch (err) {
       setError('AI analysis failed');
@@ -64,7 +64,7 @@ function Dashboard() {
   const handleSync = async () => {
     setLoading(prev => ({ ...prev, sync: true }));
     try {
-      await axios.post('http://localhost:5000/api/sync');
+      await axios.post(`${import.meta.env.VITE_API_URL}/api/sync`);
       await fetchStats();  // refresh stats after sync
       await fetchAI();     // refresh AI recommendations
     } catch (err) {
