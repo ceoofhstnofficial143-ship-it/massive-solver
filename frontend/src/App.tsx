@@ -153,24 +153,31 @@ function Dashboard() {
                 <div className="h-4 bg-white/10 rounded w-3/4"></div>
                 <div className="h-4 bg-white/10 rounded w-5/6"></div>
                 <div className="h-4 bg-white/10 rounded w-2/3"></div>
-                <p className="text-purple-300">Strategy engine is thinking...</p>
+                <p className="text-purple-300">Strategic engine is calculating niche gaps...</p>
               </div>
             ) : recommendations ? (
-              recommendations.split('\n').map((line, idx) => {
-                if (line.startsWith('###')) {
-                  return <h3 key={idx} className="text-lg font-semibold text-purple-300 mt-4 mb-2">{line.replace('###', '').trim()}</h3>;
-                } else if (line.match(/^\d+\./)) {
-                  return <div key={idx} className="ml-4 mb-1 text-gray-300">{line}</div>;
-                } else if (line.startsWith('-')) {
-                  return <div key={idx} className="ml-6 mb-1 text-gray-300">• {line.substring(1)}</div>;
-                } else if (line.trim() === '') {
-                  return <div key={idx} className="h-2" />;
-                } else {
-                  return <p key={idx} className="mb-2">{line}</p>;
-                }
-              })
+              <>
+                <div className="space-y-4">
+                  {recommendations.split('\n').map((line, idx) => {
+                    if (line.startsWith('###')) {
+                      return <h3 key={idx} className="text-lg font-bold text-purple-300 mt-6 mb-2 border-b border-white/10 pb-1">{line.replace('###', '').trim()}</h3>;
+                    } else if (line.match(/^\d+\./)) {
+                      return <div key={idx} className="ml-4 mb-2 text-gray-200 font-medium">{line}</div>;
+                    } else if (line.startsWith('-') || line.startsWith('*')) {
+                      return <div key={idx} className="ml-6 mb-1 text-gray-300">• {line.replace(/^[-*]\s*/, '')}</div>;
+                    } else if (line.trim() === '') {
+                      return <div key={idx} className="h-2" />;
+                    } else {
+                      return <p key={idx} className="mb-2 leading-relaxed">{line}</p>;
+                    }
+                  })}
+                </div>
+                <div className="mt-8 pt-4 border-t border-white/10 text-[10px] text-gray-500 italic">
+                  Disclaimer: AI-generated growth strategies are suggestions based on historical data and market trends. Results are not guaranteed. Always verify trends through the YouTube Studio Research tab.
+                </div>
+              </>
             ) : (
-              <p>No recommendations yet. Sync your data first.</p>
+              <p>No blueprint generated. Sync your channel to begin.</p>
             )}
           </div>
         </div>

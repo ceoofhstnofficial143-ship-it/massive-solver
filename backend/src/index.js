@@ -125,6 +125,20 @@ async function getHistoricalData() {
     }
 }
 
+// Simple in-memory cache for YouTube API calls (10 minute TTL)
+const ytCache = new Map();
+const CACHE_TTL = 10 * 60 * 1000; 
+
+function getCached(key) {
+    const cached = ytCache.get(key);
+    if (cached && (Date.now() - cached.timestamp < CACHE_TTL)) return cached.data;
+    return null;
+}
+
+function setCache(key, data) {
+    ytCache.set(key, { data, timestamp: Date.now() });
+}
+
 // NEW: AI Analysis Endpoint
 app.get('/analyze', async (req, res) => {
     try {
@@ -147,78 +161,87 @@ app.get('/analyze', async (req, res) => {
         
         console.log(`🔍 Starting enrichment for channel: ${channelId}`);
         
-        // Fetch live channel info (name, description) from YouTube API
+        // Fetch live channel info (name, description) from YouTube API (with caching)
         let channelName = 'Unknown';
         let channelDescription = '';
-        try {
-            console.log('📡 Fetching channel snippet...');
-            const channelRes = await axios.get('https://www.googleapis.com/youtube/v3/channels', {
-                params: { part: 'snippet', id: channelId, key: YOUTUBE_API_KEY },
-                timeout: 5000 // 5s limit
-            });
-            if (channelRes.data.items[0]) {
-                channelName = channelRes.data.items[0].snippet.title;
-                channelDescription = channelRes.data.items[0].snippet.description;
-                console.log(`✅ Found channel: ${channelName}`);
-            }
-        } catch (err) { console.log('⚠️ Could not fetch channel details:', err.message); }
+        const channelCacheKey = `channel_${channelId}`;
+        const cachedChannel = getCached(channelCacheKey);
 
-        // Get top 5 videos (for titles and themes)
+        if (cachedChannel) {
+            console.log('♻️ Using cached channel details');
+            channelName = cachedChannel.name;
+            channelDescription = cachedChannel.description;
+        } else {
+            try {
+                console.log('📡 Fetching channel snippet...');
+                const channelRes = await axios.get('https://www.googleapis.com/youtube/v3/channels', {
+                    params: { part: 'snippet', id: channelId, key: YOUTUBE_API_KEY },
+                    timeout: 5000 
+                });
+                if (channelRes.data.items[0]) {
+                    channelName = channelRes.data.items[0].snippet.title;
+                    channelDescription = channelRes.data.items[0].snippet.description;
+                    setCache(channelCacheKey, { name: channelName, description: channelDescription });
+                    console.log(`✅ Found channel: ${channelName}`);
+                }
+            } catch (err) { console.log('⚠️ Could not fetch channel details:', err.message); }
+        }
+
+        // Get top 5 videos (with caching)
         let topVideoTitles = [];
-        try {
-            console.log('📡 Fetching top video titles...');
-            const videosRes = await axios.get('https://www.googleapis.com/youtube/v3/search', {
-                params: { part: 'snippet', channelId, maxResults: 5, order: 'viewCount', type: 'video', key: YOUTUBE_API_KEY },
-                timeout: 5000
-            });
-            topVideoTitles = videosRes.data.items.map(v => v.snippet.title);
-            console.log(`✅ Loaded ${topVideoTitles.length} video titles`);
-        } catch (err) { console.log('⚠️ Could not fetch top videos:', err.message); }
+        const videosCacheKey = `videos_${channelId}`;
+        const cachedVideos = getCached(videosCacheKey);
 
-        // Calculate averages
+        if (cachedVideos) {
+            console.log('♻️ Using cached video list');
+            topVideoTitles = cachedVideos;
+        } else {
+            try {
+                console.log('📡 Fetching top video titles...');
+                const videosRes = await axios.get('https://www.googleapis.com/youtube/v3/search', {
+                    params: { part: 'snippet', channelId, maxResults: 5, order: 'viewCount', type: 'video', key: YOUTUBE_API_KEY },
+                    timeout: 5000
+                });
+                topVideoTitles = videosRes.data.items.map(v => v.snippet.title);
+                setCache(videosCacheKey, topVideoTitles);
+                console.log(`✅ Loaded ${topVideoTitles.length} video titles`);
+            } catch (err) { console.log('⚠️ Could not fetch top videos:', err.message); }
+        }
+
+        // Calculate aggregates
         const totalViews = history.reduce((sum, r) => sum + (r.views || 0), 0);
         const avgViews = (totalViews / history.length).toFixed(0);
         const totalSubsGained = history.reduce((sum, r) => sum + (r.subscribers_gained || 0), 0);
 
-        // Sophisticated prompt
+        // Advanced prompt following requested 3-step structure
         const prompt = `
-You are "Massive Solver", an elite YouTube growth hacker. Analyze the channel below and produce a **hard‑hitting, data‑driven growth blueprint**.
+System Prompt: You are "Massive Solver," an elite YouTube growth consultant. Analyze the channel data and follow these steps.
 
-Channel Name: ${channelName}
-Channel Description: ${channelDescription.substring(0, 200)}
-Channel ID: ${channelId}
-Total views (tracked): ${totalViews}
-Average views per video (est): ${avgViews}
-Total subscribers gained (tracked): ${totalSubsGained}
-Top video titles: ${topVideoTitles.join('; ') || 'Not enough data'}
+Steps:
+1. Analyze Performance: Review the provided channel_data (views, subs). How is the channel performing?
+2. Identify Content Gaps: Based on your knowledge of the YouTube niche, brainstorm 3 specific "Content Gaps"—topics the channel's audience wants but competitors aren't adequately covering.
+3. Recommend Strategy: For each gap, propose a high-potential video idea, including a working title and a brief description of the unique angle.
 
-## Your Task:
-Generate a **sharply actionable report** with these exact sections:
+Channel Data JSON: 
+${JSON.stringify({ 
+    channel_name: channelName, 
+    channel_description: channelDescription.substring(0, 300),
+    total_views_tracked: totalViews,
+    avg_views_per_period: avgViews,
+    subs_gained_tracked: totalSubsGained,
+    top_performing_titles: topVideoTitles
+}, null, 2)}
 
-### 🚀 Viral Title Templates (3 examples)
-Create 3 click‑worthy titles tailored to this channel's niche. Use power words, numbers, and curiosity gaps.
+Inferred Niche: Based on titles "${topVideoTitles.join(', ')}", determine the niche and provide tailored advice.
 
-### 🔑 High‑Search Keywords (10 terms)
-List 10 specific keywords/phrases this channel should target for SEO. Include a mix of short‑tail and long‑tail.
+Output Format: Provide a strategic report with three sections: 
+### 1. Performance Review
+### 2. Identified Content Gaps
+### 3. Recommended Video Strategy
 
-### 🔍 Content Gap Analysis
-Identify 2 topics or formats that similar successful channels use but this channel is missing. Suggest how to adapt them.
+Keep it actionable and under 700 words.`;
 
-### 📅 30‑Day Growth Sprint
-Give a day‑by‑day plan for the next 30 days, focusing on: posting schedule, community engagement, and one experimental video idea.
-
-### 💡 One "Unfair Advantage" Tactic
-Suggest a creative, low‑cost strategy to stand out (e.g., collaborating with micro‑influencers, using a unique thumbnail style, or repurposing content for Shorts).
-
-Formatting:
-- Use bold headings as shown.
-- Use bullet points for lists.
-- Be direct, no fluff.
-- If data is sparse, infer the niche from the channel name or titles.
-
-Now write the blueprint.`;
-
-        console.log('🤖 Sending advanced prompt to Gemini...');
+        console.log('🤖 Sending ultra-strategic prompt to Gemini...');
         const model = genAI.getGenerativeModel({ model: "gemma-3-12b-it" });
         const result = await model.generateContent(prompt);
         const recommendations = result.response.text();
