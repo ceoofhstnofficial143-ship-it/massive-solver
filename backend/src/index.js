@@ -109,10 +109,10 @@ async function syncToXano(data) {
     }
 }
 
-// NEW: Fetch historical data from Xano for a specific channel
-async function getHistoricalData(channelId) {
+// NEW: Fetch historical data from Xano (latest records)
+async function getHistoricalData() {
     try {
-        const xanoUrl = `${XANO_BASE_URL}/youtube_analytics?channel_id=${channelId}`;
+        const xanoUrl = `${XANO_BASE_URL}/youtube_analytics?_sort=-created_at&_limit=10`;
         const response = await axios.get(xanoUrl, {
             headers: {
                 'Authorization': `Bearer ${XANO_API_KEY}`
@@ -127,12 +127,9 @@ async function getHistoricalData(channelId) {
 
 // NEW: AI Analysis Endpoint
 app.get('/analyze', async (req, res) => {
-    const { channelId } = req.query;
-    if (!channelId) return res.status(400).json({ error: 'channelId required' });
-    
     try {
-        console.log(`📊 Fetching historical data from Xano for ${channelId}...`);
-        const history = await getHistoricalData(channelId);
+        console.log('📊 Fetching historical data from Xano...');
+        const history = await getHistoricalData();
 
         if (!history || history.length === 0) {
             return res.json({
@@ -258,7 +255,20 @@ app.get('/api/stats', async (req, res) => {
         res.status(500).json({ error: 'Failed to fetch stats' });
     }
 });
-
+// Test endpoint to see what Xano has for a channel
+app.get('/test-xano', async (req, res) => {
+    const { channelId } = req.query;
+    if (!channelId) return res.status(400).json({ error: 'channelId required' });
+    try {
+        const url = `${XANO_BASE_URL}/youtube_analytics?channel_id=${channelId}&_sort=-created_at`;
+        const response = await axios.get(url, {
+            headers: { 'Authorization': `Bearer ${XANO_API_KEY}` }
+        });
+        res.json(response.data);
+    } catch (error) {
+        res.status(500).json({ error: 'Xano test failed', details: error.message });
+    }
+});
 // POST /api/sync – triggers a fresh YouTube sync
 app.post('/api/sync', async (req, res) => {
     const { channelId } = req.body;

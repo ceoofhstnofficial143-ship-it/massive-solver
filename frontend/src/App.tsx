@@ -53,7 +53,7 @@ function Dashboard() {
 
   const fetchAI = async () => {
     try {
-      const res = await axios.get(`${import.meta.env.VITE_API_URL}/analyze?channelId=${channelId}`);
+      const res = await axios.get(`${import.meta.env.VITE_API_URL}/analyze`);
       setRecommendations(res.data.recommendations);
     } catch (err) {
       setError('AI analysis failed');
