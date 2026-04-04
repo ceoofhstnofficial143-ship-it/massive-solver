@@ -172,8 +172,27 @@ function Dashboard() {
                     }
                   })}
                 </div>
-                <div className="mt-8 pt-4 border-t border-white/10 text-[10px] text-gray-500 italic">
-                  Disclaimer: AI-generated growth strategies are suggestions based on historical data and market trends. Results are not guaranteed. Always verify trends through the YouTube Studio Research tab.
+                <div className="mt-8 pt-4 border-t border-white/10 flex items-center justify-between">
+                  <div className="text-[10px] text-gray-500 italic max-w-md">
+                    Disclaimer: AI-generated growth strategies are suggestions based on historical data. Results are not guaranteed. Always verify trends through YouTube Studio Research tab.
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <span className="text-xs text-gray-400">Was this helpful?</span>
+                    <div className="flex gap-2">
+                       <button 
+                        onClick={() => axios.post(`${import.meta.env.VITE_API_URL}/api/feedback`, { rating: 1, feedback: 'Up' })}
+                        className="p-1 hover:bg-white/10 rounded-md transition" title="Yes"
+                       >
+                         👍
+                       </button>
+                       <button 
+                        onClick={() => axios.post(`${import.meta.env.VITE_API_URL}/api/feedback`, { rating: 0, feedback: 'Down' })}
+                        className="p-1 hover:bg-white/10 rounded-md transition" title="No"
+                       >
+                         👎
+                       </button>
+                    </div>
+                  </div>
                 </div>
               </>
             ) : (

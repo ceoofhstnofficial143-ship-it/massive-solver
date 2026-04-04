@@ -222,6 +222,8 @@ Steps:
 2. Identify Content Gaps: Based on your knowledge of the YouTube niche, brainstorm 3 specific "Content Gaps"—topics the channel's audience wants but competitors aren't adequately covering.
 3. Recommend Strategy: For each gap, propose a high-potential video idea, including a working title and a brief description of the unique angle.
 
+**Transparency Rule:** Whenever possible, cite specific top-performing videos from the provided list to justify your advice (e.g., "Inspired by your success with '...'").
+
 Channel Data JSON: 
 ${JSON.stringify({ 
     channel_name: channelName, 
@@ -229,7 +231,7 @@ ${JSON.stringify({
     total_views_tracked: totalViews,
     avg_views_per_period: avgViews,
     subs_gained_tracked: totalSubsGained,
-    top_performing_titles: topVideoTitles
+    top_performing_videos: topVideoTitles
 }, null, 2)}
 
 Inferred Niche: Based on titles "${topVideoTitles.join(', ')}", determine the niche and provide tailored advice.
@@ -239,7 +241,7 @@ Output Format: Provide a strategic report with three sections:
 ### 2. Identified Content Gaps
 ### 3. Recommended Video Strategy
 
-Keep it actionable and under 700 words.`;
+Keep it actionable, professional, and under 700 words.`;
 
         console.log('🤖 Sending ultra-strategic prompt to Gemini...');
         const model = genAI.getGenerativeModel({ model: "gemma-3-12b-it" });
@@ -259,6 +261,13 @@ Keep it actionable and under 700 words.`;
         console.error('❌ AI Analysis Error:', error);
         res.status(500).json({ error: 'Analysis failed', details: error.message });
     }
+});
+
+// NEW: Analytics Rating endpoint (Stub for scaling)
+app.post('/api/feedback', (req, res) => {
+    const { rating, feedback } = req.body;
+    console.log(`⭐ New AI Feedback: ${rating}/5 - ${feedback}`);
+    res.json({ success: true, message: 'Thank you for your feedback!' });
 });
 
 // Original test endpoint (kept for compatibility)
