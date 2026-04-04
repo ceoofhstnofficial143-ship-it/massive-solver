@@ -83,18 +83,19 @@ async function fetchYouTubeStats(channelId) {
 
 // Sync to Xano
 async function syncToXano(data) {
+    if (!data) throw new Error('Cannot sync null data to Xano');
     try {
         const xanoUrl = `${XANO_BASE_URL}/youtube_analytics`;
 
         const payload = {
             user: 1,
             date: new Date().toISOString().split('T')[0],
-            channel_id: data.channel_id, // Added for Phase 2
-            views: data.views,
-            subscribers_gained: 0,
+            channel_id: data.channel_id || data.channelId || 'unknown',
+            views: data.views || 0,
+            subscribers_gained: data.subscribers || 0,
             subscribers_lost: 0,
-            top_video_id: data.top_videos[0]?.id || '',
-            top_video_title: data.top_videos[0]?.title || '',
+            top_video_id: data.top_videos?.[0]?.id || '',
+            top_video_title: data.top_videos?.[0]?.title || '',
             top_video_views: 0
         };
 
@@ -112,6 +113,26 @@ async function syncToXano(data) {
     } catch (error) {
         console.error('❌ Xano Sync Error:', error.response?.data || error.message);
         throw error;
+    }
+}
+
+// Gemini retry helper
+async function callGeminiWithRetry(prompt, retries = 3) {
+    for (let i = 0; i < retries; i++) {
+        try {
+            const model = genAI.getGenerativeModel({ model: "gemma-3-12b-it" });
+            const result = await model.generateContent(prompt);
+            return result.response.text();
+        } catch (err) {
+            // Status 503: Service Unavailable OR Status 429: Rate Limit
+            if ((err.status === 503 || err.status === 429) && i < retries - 1) {
+                const delay = Math.pow(2, i) * 1000;
+                console.log(`⚠️ Gemini busy (status ${err.status}), retrying in ${delay}ms...`);
+                await new Promise(r => setTimeout(r, delay));
+            } else {
+                throw err;
+            }
+        }
     }
 }
 
@@ -251,9 +272,7 @@ Output Format: Provide a strategic report with three sections:
 Keep it actionable, professional, and under 700 words.`;
 
         console.log('🤖 Sending ultra-strategic prompt to Gemini...');
-        const model = genAI.getGenerativeModel({ model: "gemma-3-12b-it" });
-        const result = await model.generateContent(prompt);
-        const recommendations = result.response.text();
+        const recommendations = await callGeminiWithRetry(prompt);
 
         res.json({
             success: true,
