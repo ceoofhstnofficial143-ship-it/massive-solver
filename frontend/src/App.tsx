@@ -1,6 +1,10 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { 
+  ResponsiveContainer, AreaChart, Area, XAxis, YAxis, 
+  Tooltip, CartesianGrid 
+} from 'recharts';
 
 // Simple login placeholder (no real auth for MVP)
 function Login({ onLogin }: { onLogin: () => void }) {
@@ -36,9 +40,21 @@ function Login({ onLogin }: { onLogin: () => void }) {
 function Dashboard() {
   const [channelId, setChannelId] = useState('UCwTMRMFBYAoTAmhHO6s3Mag'); // Phase 2: multi-channel
   const [stats, setStats] = useState({ views: 0, subscribers: 0, videoCount: 0, topVideo: null, lastUpdated: null });
+  const [history, setHistory] = useState([]);
   const [recommendations, setRecommendations] = useState('');
-  const [loading, setLoading] = useState({ stats: true, ai: true, sync: false });
+  const [loading, setLoading] = useState({ stats: true, ai: true, sync: false, history: true });
   const [error, setError] = useState('');
+
+  const fetchHistory = async () => {
+    try {
+      const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/history?channelId=${channelId}`);
+      setHistory(res.data);
+    } catch (err) {
+      console.error('Failed to load history');
+    } finally {
+      setLoading(prev => ({ ...prev, history: false }));
+    }
+  };
 
   const fetchStats = async () => {
     try {
@@ -66,8 +82,7 @@ function Dashboard() {
     setLoading(prev => ({ ...prev, sync: true }));
     try {
       await axios.post(`${import.meta.env.VITE_API_URL}/api/sync`, { channelId: targetChannelId });
-      await fetchStats();  // refresh stats after sync
-      await fetchAI();     // refresh AI recommendations
+      await Promise.all([fetchStats(), fetchAI(), fetchHistory()]);
     } catch (err) {
       setError('Sync failed');
     } finally {
@@ -78,6 +93,7 @@ function Dashboard() {
   useEffect(() => {
     fetchStats();
     fetchAI();
+    fetchHistory();
   }, []);
 
   if (loading.stats) {
@@ -140,6 +156,40 @@ function Dashboard() {
             <h3 className="text-gray-400 text-sm uppercase">Videos</h3>
             <p className="text-4xl font-bold text-white mt-2">{stats.videoCount}</p>
           </div>
+        </div>
+
+        {/* View Trends Chart */}
+        <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20 mb-8 h-[350px]">
+          <h3 className="text-gray-400 text-sm uppercase mb-4">View Performance Trend</h3>
+          {loading.history ? (
+            <div className="flex items-center justify-center h-full text-gray-500">Generating chart...</div>
+          ) : history.length > 1 ? (
+            <ResponsiveContainer width="100%" height="90%">
+              <AreaChart data={history}>
+                <defs>
+                  <linearGradient id="colorViews" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.8}/>
+                    <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#374151" vertical={false} />
+                <XAxis 
+                  dataKey="date" 
+                  stroke="#9ca3af" 
+                  fontSize={12} 
+                  tickFormatter={(str) => new Date(str).toLocaleDateString([], { month: 'short', day: 'numeric' })}
+                />
+                <YAxis stroke="#9ca3af" fontSize={12} />
+                <Tooltip 
+                  contentStyle={{ backgroundColor: '#1f2937', border: 'none', borderRadius: '8px', color: '#fff' }} 
+                  itemStyle={{ color: '#a78bfa' }}
+                />
+                <Area type="monotone" dataKey="views" stroke="#8b5cf6" fillOpacity={1} fill="url(#colorViews)" />
+              </AreaChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="flex items-center justify-center h-full text-gray-400">Not enough historical data points for a trend chart. Sync more often!</div>
+          )}
         </div>
 
         {/* AI Recommendations */}

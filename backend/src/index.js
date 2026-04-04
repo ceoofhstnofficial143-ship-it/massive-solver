@@ -332,6 +332,23 @@ app.get('/api/stats', async (req, res) => {
         res.status(500).json({ error: 'Failed to fetch stats' });
     }
 });
+
+// GET /api/history – returns last 30 records for chart visualization
+app.get('/api/history', async (req, res) => {
+    const { channelId } = req.query;
+    if (!channelId) return res.status(400).json({ error: 'channelId required' });
+    try {
+        const xanoUrl = `${XANO_BASE_URL}/youtube_analytics?channel_id=${channelId}&_sort=-created_at&_limit=30`;
+        const response = await axios.get(xanoUrl, {
+            headers: { 'Authorization': `Bearer ${XANO_API_KEY}` }
+        });
+        // Reverse to show oldest to newest for the chart
+        res.json(response.data.reverse());
+    } catch (error) {
+        console.error('History error:', error.message);
+        res.status(500).json({ error: 'Failed to fetch history' });
+    }
+});
 // Test endpoint to see what Xano has for a channel
 app.get('/test-xano', async (req, res) => {
     const { channelId } = req.query;
