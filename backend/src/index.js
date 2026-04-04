@@ -341,12 +341,16 @@ app.get('/api/history', async (req, res) => {
     const { channelId } = req.query;
     if (!channelId) return res.status(400).json({ error: 'channelId required' });
     try {
-        const xanoUrl = `${XANO_BASE_URL}/youtube_analytics?channel_id=${channelId}&_sort=-created_at&_limit=30`;
+        const xanoUrl = `${XANO_BASE_URL}/youtube_analytics?channel_id=${channelId}&_sort=date&_limit=30`;
         const response = await axios.get(xanoUrl, {
             headers: { 'Authorization': `Bearer ${XANO_API_KEY}` }
         });
-        // Reverse to show oldest to newest for the chart
-        res.json(response.data.reverse());
+        // Return each record's cumulative views as-is (no summing!)
+        const history = response.data.map(record => ({
+            date: record.date,
+            views: record.views  // cumulative total from YouTube snapshot
+        }));
+        res.json(history);
     } catch (error) {
         console.error('History error:', error.message);
         res.status(500).json({ error: 'Failed to fetch history' });
@@ -479,6 +483,19 @@ app.post('/api/sync', async (req, res) => {
     } catch (error) {
         console.error('Sync error:', error.message);
         res.status(500).json({ error: 'Failed to sync data' });
+    }
+});
+
+// Debug: see raw YouTube API response for a channel
+app.get('/debug-youtube', async (req, res) => {
+    const { channelId } = req.query;
+    if (!channelId) return res.status(400).json({ error: 'channelId required' });
+    try {
+        const url = `https://www.googleapis.com/youtube/v3/channels?part=statistics&id=${channelId}&key=${YOUTUBE_API_KEY}`;
+        const response = await axios.get(url);
+        res.json(response.data);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
     }
 });
 
