@@ -1,7 +1,7 @@
 const express = require('express');
 const axios = require('axios');
 const cors = require('cors');
-const { GoogleGenerativeAI } = require("@google/generative-ai");
+const Groq = require('groq-sdk');
 require('dotenv').config();
 
 const app = express();
@@ -11,20 +11,20 @@ app.use(express.json());
 // Configuration check
 if (!process.env.YOUTUBE_API_KEY) console.error('❌ MISSING YOUTUBE_API_KEY');
 if (!process.env.XANO_API_KEY) console.error('❌ MISSING XANO_API_KEY');
-if (!process.env.GOOGLE_API_KEY) console.error('❌ MISSING GOOGLE_API_KEY');
+if (!process.env.GROQ_API_KEY) console.error('❌ MISSING GROQ_API_KEY');
 
 const PORT = process.env.PORT || 5000;
 
 // Configuration
 const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
 const XANO_API_KEY = process.env.XANO_API_KEY;
-const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY;
+const GROQ_API_KEY = process.env.GROQ_API_KEY;
 
 const XANO_BASE_URL = 'https://x8ki-letl-twmt.n7.xano.io/api:YD4g7WYe';
 const CHANNEL_ID = 'UCwTMRMFBYAoTAmhHO6s3Mag';
 
-// Initialize the Gemini AI client
-const genAI = new GoogleGenerativeAI(GOOGLE_API_KEY);
+// Initialize the Groq AI client
+const groq = new Groq({ apiKey: GROQ_API_KEY });
 
 // Test endpoint
 app.get('/ping', (req, res) => {
@@ -132,25 +132,7 @@ async function syncToXano(data) {
     }
 }
 
-// Gemini retry helper
-async function callGeminiWithRetry(prompt, retries = 3) {
-    for (let i = 0; i < retries; i++) {
-        try {
-            const model = genAI.getGenerativeModel({ model: "gemma-3-12b-it" });
-            const result = await model.generateContent(prompt);
-            return result.response.text();
-        } catch (err) {
-            // Status 503: Service Unavailable OR Status 429: Rate Limit
-            if ((err.status === 503 || err.status === 429) && i < retries - 1) {
-                const delay = Math.pow(2, i) * 1000;
-                console.log(`⚠️ Gemini busy (status ${err.status}), retrying in ${delay}ms...`);
-                await new Promise(r => setTimeout(r, delay));
-            } else {
-                throw err;
-            }
-        }
-    }
-}
+
 
 // NEW: Fetch historical data from Xano (latest records)
 async function getHistoricalData() {
@@ -170,7 +152,7 @@ async function getHistoricalData() {
 
 // Simple in-memory cache for YouTube API calls (10 minute TTL)
 const ytCache = new Map();
-const CACHE_TTL = 10 * 60 * 1000; 
+const CACHE_TTL = 10 * 60 * 1000;
 
 function getCached(key) {
     const cached = ytCache.get(key);
@@ -184,126 +166,68 @@ function setCache(key, data) {
 
 // NEW: AI Analysis Endpoint
 app.get('/analyze', async (req, res) => {
+    const { channelId } = req.query;
+    if (!channelId) return res.status(400).json({ error: 'channelId required' });
+
     try {
-        const { channelId: queryChannelId } = req.query;
-        console.log('📊 Fetching historical data from Xano...');
-        const history = await getHistoricalData();
-        
-        if (!history || history.length === 0) {
-            return res.json({
-                success: true,
-                message: "No data yet. Please sync a YouTube channel first.",
-                recommendations: "After syncing, I'll provide a complete growth strategy."
-            });
+        // Fetch historical data from Xano (same as before)
+        const xanoUrl = `${XANO_BASE_URL}/youtube_analytics?channel_id=${channelId}&_sort=-date&_limit=10`;
+        const xanoRes = await axios.get(xanoUrl, {
+            headers: { 'Authorization': `Bearer ${XANO_API_KEY}` }
+        });
+        const history = xanoRes.data;
+        if (!history.length) {
+            return res.json({ success: true, recommendations: "No data yet. Sync this channel first." });
         }
 
-        console.log(`📈 Found ${history.length} records.`);
-
-        // Prioritize query ID, fall back to newest sync record
-        const latest = history[0];
-        const channelId = queryChannelId || latest.channel_id || CHANNEL_ID;
-        
-        console.log(`🔍 Starting enrichment for channel: ${channelId}`);
-        
-        // Fetch live channel info (name, description) from YouTube API (with caching)
+        // Fetch channel name & description (optional but helpful)
         let channelName = 'Unknown';
-        let channelDescription = '';
-        const channelCacheKey = `channel_${channelId}`;
-        const cachedChannel = getCached(channelCacheKey);
+        try {
+            const channelRes = await axios.get('https://www.googleapis.com/youtube/v3/channels', {
+                params: { part: 'snippet', id: channelId, key: YOUTUBE_API_KEY }
+            });
+            if (channelRes.data.items[0]) channelName = channelRes.data.items[0].snippet.title;
+        } catch (err) { console.log('Could not fetch channel name'); }
 
-        if (cachedChannel) {
-            console.log('♻️ Using cached channel details');
-            channelName = cachedChannel.name;
-            channelDescription = cachedChannel.description;
-        } else {
-            try {
-                console.log('📡 Fetching channel snippet...');
-                const channelRes = await axios.get('https://www.googleapis.com/youtube/v3/channels', {
-                    params: { part: 'snippet', id: channelId, key: YOUTUBE_API_KEY },
-                    timeout: 5000 
-                });
-                if (channelRes.data.items[0]) {
-                    channelName = channelRes.data.items[0].snippet.title;
-                    channelDescription = channelRes.data.items[0].snippet.description;
-                    setCache(channelCacheKey, { name: channelName, description: channelDescription });
-                    console.log(`✅ Found channel: ${channelName}`);
-                }
-            } catch (err) { console.log('⚠️ Could not fetch channel details:', err.message); }
-        }
+        // Prepare data for AI
+        const latest = history[0];
+        const totalViews = history.reduce((sum, r) => sum + (r.views || 0), 0);
+        const avgViews = (totalViews / history.length).toFixed(0);
 
-        // Get top 5 videos (with caching)
-        let topVideoTitles = [];
-        const videosCacheKey = `videos_${channelId}`;
-        const cachedVideos = getCached(videosCacheKey);
+        const prompt = `You are "Massive Solver", an elite YouTube growth consultant.
+Channel: ${channelName} (ID: ${channelId})
+Total views (tracked): ${totalViews}
+Average views per video: ${avgViews}
+Latest subscriber count: ${latest.subscribers_gained || 0}
+Top video: ${latest.top_video_title || 'None'}
 
-        if (cachedVideos) {
-            console.log('♻️ Using cached video list');
-            topVideoTitles = cachedVideos;
-        } else {
-            try {
-                console.log('📡 Fetching top video titles...');
-                const videosRes = await axios.get('https://www.googleapis.com/youtube/v3/search', {
-                    params: { part: 'snippet', channelId, maxResults: 5, order: 'viewCount', type: 'video', key: YOUTUBE_API_KEY },
-                    timeout: 5000
-                });
-                topVideoTitles = videosRes.data.items.map(v => v.snippet.title);
-                setCache(videosCacheKey, topVideoTitles);
-                console.log(`✅ Loaded ${topVideoTitles.length} video titles`);
-            } catch (err) { console.log('⚠️ Could not fetch top videos:', err.message); }
-        }
+Generate a sharp, actionable growth blueprint with:
+1. Performance review (2-3 sentences)
+2. Three content gaps (topics the audience wants but competitors miss)
+3. For each gap, a video idea (title + unique angle)
+Keep it concise and under 500 words.`;
 
-        console.log(`✅ Enrichment complete. Comments fetched: ${youtubeData?.comments?.length || 0}`);
+        // Call Groq
+        const chatCompletion = await groq.chat.completions.create({
+            messages: [
+                { role: "system", content: "You are a YouTube growth expert. Provide clear, bullet-point advice." },
+                { role: "user", content: prompt }
+            ],
+            model: "llama-3.3-70b-versatile", // Free tier, 30 req/min
+            temperature: 0.5,
+            max_tokens: 1024,
+        });
 
-        // Calculate aggregates from newest record
-        const totalViews = latest.views || 0;
-        const avgViews = (history.reduce((sum, r) => sum + (r.views || 0), 0) / history.length).toFixed(0);
-        const totalSubsGained = history.reduce((sum, r) => sum + (r.subscribers_gained || 0), 0);
-
-        // Advanced prompt following requested 3-step structure
-        const prompt = `
-System Prompt: You are "Massive Solver," an elite YouTube growth consultant. Analyze the channel data and follow these steps.
-
-Steps:
-1. Analyze Performance: Review the provided channel_data (views, subs). How is the channel performing?
-2. Identify Content Gaps: Brainstorm 3 specific "Content Gaps"—topics the channel's audience wants but competitors aren't covering.
-3. Recommend Strategy: Propose a high-potential video idea for each gap.
-4. NEW: Sentiment Analysis: Analyze the recent audience comments. Are they positive? What are they asking for?
-
-**Transparency Rule:** Whenever possible, cite specific top-performing videos from the provided list to justify your advice.
-
-Channel Data JSON: 
-${JSON.stringify({ 
-    channel_name: channelName, 
-    channel_description: channelDescription.substring(0, 300),
-    total_views_tracked: totalViews,
-    avg_views_per_period: avgViews,
-    subs_gained_tracked: totalSubsGained,
-    top_performing_videos: topVideoTitles,
-    recent_comments: youtubeData?.comments || []
-}, null, 2)}
-
-Output Format: Provide a strategic report with these sections: 
-### 1. Performance Review
-### 2. Identified Content Gaps
-### 3. Recommended Video Strategy
-### 4. Audience Sentiment & Demands
-
-Keep it actionable, professional, and under 800 words.`;
-
-        console.log('🤖 Sending enriched blueprint to Gemma 3 12B...');
-        const recommendations = await callGeminiWithRetry(prompt);
+        const recommendations = chatCompletion.choices[0]?.message?.content || "No response from AI.";
 
         res.json({
             success: true,
-            data_points_analyzed: history.length,
-            total_views: totalViews,
-            avg_views: avgViews,
             channel_name: channelName,
+            data_points_analyzed: history.length,
             recommendations: recommendations
         });
-
     } catch (error) {
-        console.error('❌ AI Analysis Error:', error);
+        console.error('Groq analysis error:', error);
         res.status(500).json({ error: 'Analysis failed', details: error.message });
     }
 });
@@ -342,14 +266,14 @@ app.get('/test/youtube', async (req, res) => {
 app.get('/api/stats', async (req, res) => {
     const { channelId } = req.query;
     if (!channelId) return res.status(400).json({ error: 'channelId required' });
-    
+
     try {
         // Query Xano for records matching that channel, sorted by latest
         const xanoUrl = `${XANO_BASE_URL}/youtube_analytics?channel_id=${channelId}&_sort=-created_at&_limit=1`;
         const response = await axios.get(xanoUrl, {
             headers: { 'Authorization': `Bearer ${XANO_API_KEY}` }
         });
-        
+
         if (response.data && response.data.length > 0) {
             const latest = response.data[0];
             // Fetch live stats (falls back to null on quota error)
