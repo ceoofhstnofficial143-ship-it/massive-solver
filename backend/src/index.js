@@ -66,12 +66,28 @@ async function fetchYouTubeStats(channelId) {
             thumbnail: video.snippet.thumbnails.default.url
         }));
 
+        // NEW: Fetch recent comments for sentiment analysis
+        let recentComments = [];
+        try {
+            const commentsRes = await axios.get('https://www.googleapis.com/youtube/v3/commentThreads', {
+                params: {
+                    part: 'snippet',
+                    channelId: channelId,
+                    maxResults: 10,
+                    order: 'time',
+                    key: YOUTUBE_API_KEY
+                }
+            });
+            recentComments = commentsRes.data.items.map(c => c.snippet.topLevelComment.snippet.textDisplay);
+        } catch (err) { console.log('⚠️ Could not fetch comments'); }
+
         return {
             channel_id: channelId,
             views: parseInt(stats.viewCount) || 0,
             subscribers: parseInt(stats.subscriberCount) || 0,
             video_count: parseInt(stats.videoCount) || 0,
             top_videos: topVideos,
+            comments: recentComments,
             fetched_at: new Date().toISOString()
         };
     } catch (error) {
@@ -120,7 +136,7 @@ async function syncToXano(data) {
 async function callGeminiWithRetry(prompt, retries = 3) {
     for (let i = 0; i < retries; i++) {
         try {
-            const model = genAI.getGenerativeModel({ model: "gemma-3-12b-it" });
+            const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
             const result = await model.generateContent(prompt);
             return result.response.text();
         } catch (err) {
@@ -236,6 +252,8 @@ app.get('/analyze', async (req, res) => {
             } catch (err) { console.log('⚠️ Could not fetch top videos:', err.message); }
         }
 
+        console.log(`✅ Enrichment complete. Comments fetched: ${youtubeData?.comments?.length || 0}`);
+
         // Calculate aggregates from newest record
         const totalViews = latest.views || 0;
         const avgViews = (history.reduce((sum, r) => sum + (r.views || 0), 0) / history.length).toFixed(0);
@@ -247,10 +265,11 @@ System Prompt: You are "Massive Solver," an elite YouTube growth consultant. Ana
 
 Steps:
 1. Analyze Performance: Review the provided channel_data (views, subs). How is the channel performing?
-2. Identify Content Gaps: Based on your knowledge of the YouTube niche, brainstorm 3 specific "Content Gaps"—topics the channel's audience wants but competitors aren't adequately covering.
-3. Recommend Strategy: For each gap, propose a high-potential video idea, including a working title and a brief description of the unique angle.
+2. Identify Content Gaps: Brainstorm 3 specific "Content Gaps"—topics the channel's audience wants but competitors aren't covering.
+3. Recommend Strategy: Propose a high-potential video idea for each gap.
+4. NEW: Sentiment Analysis: Analyze the recent audience comments. Are they positive? What are they asking for?
 
-**Transparency Rule:** Whenever possible, cite specific top-performing videos from the provided list to justify your advice (e.g., "Inspired by your success with '...'").
+**Transparency Rule:** Whenever possible, cite specific top-performing videos from the provided list to justify your advice.
 
 Channel Data JSON: 
 ${JSON.stringify({ 
@@ -259,19 +278,19 @@ ${JSON.stringify({
     total_views_tracked: totalViews,
     avg_views_per_period: avgViews,
     subs_gained_tracked: totalSubsGained,
-    top_performing_videos: topVideoTitles
+    top_performing_videos: topVideoTitles,
+    recent_comments: youtubeData?.comments || []
 }, null, 2)}
 
-Inferred Niche: Based on titles "${topVideoTitles.join(', ')}", determine the niche and provide tailored advice.
-
-Output Format: Provide a strategic report with three sections: 
+Output Format: Provide a strategic report with these sections: 
 ### 1. Performance Review
 ### 2. Identified Content Gaps
 ### 3. Recommended Video Strategy
+### 4. Audience Sentiment & Demands
 
-Keep it actionable, professional, and under 700 words.`;
+Keep it actionable, professional, and under 800 words.`;
 
-        console.log('🤖 Sending ultra-strategic prompt to Gemini...');
+        console.log('🤖 Sending enriched blueprint to Gemini 1.5 Flash...');
         const recommendations = await callGeminiWithRetry(prompt);
 
         res.json({
