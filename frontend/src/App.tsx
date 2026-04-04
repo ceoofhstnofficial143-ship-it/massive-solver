@@ -36,6 +36,17 @@ function Login({ onLogin }: { onLogin: () => void }) {
   );
 }
 
+// Simple retry helper
+const fetchWithRetry = async (fn: () => Promise<any>, retries = 3, delay = 1000): Promise<any> => {
+  try {
+    return await fn();
+  } catch (err) {
+    if (retries <= 0) throw err;
+    await new Promise(r => setTimeout(r, delay));
+    return fetchWithRetry(fn, retries - 1, delay * 2);
+  }
+};
+
 // Dashboard component
 function Dashboard() {
   const [channelId, setChannelId] = useState('UCwTMRMFBYAoTAmhHO6s3Mag'); // Phase 2: multi-channel
@@ -47,10 +58,10 @@ function Dashboard() {
 
   const fetchHistory = async () => {
     try {
-      const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/history?channelId=${channelId}`);
+      const res = await fetchWithRetry(() => axios.get(`${import.meta.env.VITE_API_URL}/api/history?channelId=${channelId}`));
       setHistory(res.data);
     } catch (err) {
-      console.error('Failed to load history');
+      console.error('Failed to load history after retries');
     } finally {
       setLoading(prev => ({ ...prev, history: false }));
     }
@@ -58,10 +69,10 @@ function Dashboard() {
 
   const fetchStats = async () => {
     try {
-      const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/stats?channelId=${channelId}`, { timeout: 30000 });
+      const res = await fetchWithRetry(() => axios.get(`${import.meta.env.VITE_API_URL}/api/stats?channelId=${channelId}`, { timeout: 30000 }));
       setStats(res.data);
-    } catch (err) {
-      setError('Failed to load stats');
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Failed to load stats');
     } finally {
       setLoading(prev => ({ ...prev, stats: false }));
     }
@@ -69,7 +80,7 @@ function Dashboard() {
 
   const fetchAI = async (selectedChannelId: string) => {
     try {
-      const res = await axios.get(`${import.meta.env.VITE_API_URL}/analyze?channelId=${selectedChannelId}`, { timeout: 45000 });
+      const res = await fetchWithRetry(() => axios.get(`${import.meta.env.VITE_API_URL}/analyze?channelId=${selectedChannelId}`, { timeout: 45000 }));
       setRecommendations(res.data.recommendations);
     } catch (err) {
       setError('AI analysis failed');
