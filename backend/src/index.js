@@ -381,11 +381,14 @@ app.post('/api/sync', async (req, res) => {
     try {
         console.log(`Syncing channel: ${channelId}`);
         const youtubeData = await fetchYouTubeStats(channelId);
-        const xanoResult = await syncToXano(youtubeData);
-        res.json({ success: true, message: 'Sync completed', data: xanoResult });
+        if (!youtubeData) {
+            return res.status(429).json({ error: 'YouTube quota exceeded. Try again tomorrow.' });
+        }
+        const xanoData = await syncToXano(youtubeData);
+        res.json({ success: true, xanoData });
     } catch (error) {
         console.error('Sync error:', error.message);
-        res.status(500).json({ error: 'Sync failed' });
+        res.status(500).json({ error: 'Failed to sync data' });
     }
 });
 

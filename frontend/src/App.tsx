@@ -83,8 +83,8 @@ function Dashboard() {
     try {
       await axios.post(`${import.meta.env.VITE_API_URL}/api/sync`, { channelId: targetChannelId });
       await Promise.all([fetchStats(), fetchAI(targetChannelId), fetchHistory()]);
-    } catch (err) {
-      setError('Sync failed');
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Sync failed');
     } finally {
       setLoading(prev => ({ ...prev, sync: false }));
     }
