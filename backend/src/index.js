@@ -134,56 +134,83 @@ app.get('/analyze', async (req, res) => {
         if (!history || history.length === 0) {
             return res.json({
                 success: true,
-                message: "Not enough data yet. Sync a YouTube channel first.",
-                recommendations: "After syncing, I'll provide personalized growth advice."
+                message: "No data yet. Please sync a YouTube channel first.",
+                recommendations: "After syncing, I'll provide a complete growth strategy."
             });
         }
 
-        console.log(`📈 Found ${history.length} records. Preparing data for AI...`);
+        console.log(`📈 Found ${history.length} records.`);
 
-        // Calculate aggregates
-        const totalViews = history.reduce((sum, record) => sum + (record.views || 0), 0);
-        const avgViews = (totalViews / history.length).toFixed(0);
+        // Get latest record
         const latest = history[history.length - 1];
-        const channelId = latest.channel_id || 'unknown';
+        const channelId = latest.channel_id;
+        
+        // Fetch live channel info (name, description) from YouTube API
+        let channelName = 'Unknown';
+        let channelDescription = '';
+        try {
+            const channelRes = await axios.get('https://www.googleapis.com/youtube/v3/channels', {
+                params: { part: 'snippet', id: channelId, key: YOUTUBE_API_KEY }
+            });
+            if (channelRes.data.items[0]) {
+                channelName = channelRes.data.items[0].snippet.title;
+                channelDescription = channelRes.data.items[0].snippet.description;
+            }
+        } catch (err) { console.log('Could not fetch channel details'); }
 
-        // Get top performing video from history (by views)
-        const topVideo = history.reduce((best, record) => 
-            (record.top_video_views > best.views) ? { title: record.top_video_title, views: record.top_video_views } : best, 
-            { title: 'None', views: 0 });
+        // Get top 5 videos (for titles and themes)
+        let topVideoTitles = [];
+        try {
+            const videosRes = await axios.get('https://www.googleapis.com/youtube/v3/search', {
+                params: { part: 'snippet', channelId, maxResults: 5, order: 'viewCount', type: 'video', key: YOUTUBE_API_KEY }
+            });
+            topVideoTitles = videosRes.data.items.map(v => v.snippet.title);
+        } catch (err) { console.log('Could not fetch top videos'); }
 
-        // Structured prompt
+        // Calculate averages
+        const totalViews = history.reduce((sum, r) => sum + (r.views || 0), 0);
+        const avgViews = (totalViews / history.length).toFixed(0);
+        const totalSubsGained = history.reduce((sum, r) => sum + (r.subscribers_gained || 0), 0);
+
+        // Sophisticated prompt
         const prompt = `
-You are "Massive Solver", an expert YouTube growth consultant. Your tone is professional, encouraging, and data‑driven.
+You are "Massive Solver", an elite YouTube growth hacker. Analyze the channel below and produce a **hard‑hitting, data‑driven growth blueprint**.
 
-Based on the following channel data, provide **exactly 3 recommendations** under these headings:
+Channel Name: ${channelName}
+Channel Description: ${channelDescription.substring(0, 200)}
+Channel ID: ${channelId}
+Total views (tracked): ${totalViews}
+Average views per video (est): ${avgViews}
+Total subscribers gained (tracked): ${totalSubsGained}
+Top video titles: ${topVideoTitles.join('; ') || 'Not enough data'}
 
-## 📈 Content Strategy
-(1 actionable idea about what type of videos to make next, based on what's working)
+## Your Task:
+Generate a **sharply actionable report** with these exact sections:
 
-## 🎯 Title & Thumbnail Optimization
-(1 specific tip to improve click‑through rate, using keywords or design)
+### 🚀 Viral Title Templates (3 examples)
+Create 3 click‑worthy titles tailored to this channel's niche. Use power words, numbers, and curiosity gaps.
 
-## 💬 Community & Engagement
-(1 actionable tactic to turn viewers into subscribers)
+### 🔑 High‑Search Keywords (10 terms)
+List 10 specific keywords/phrases this channel should target for SEO. Include a mix of short‑tail and long‑tail.
 
-**Channel Data:**
-- Total views (all time): ${totalViews}
-- Average views per tracked period: ${avgViews}
-- Best performing video title: "${topVideo.title}" (${topVideo.views} views)
-- Most recent subscriber count (approx): ${latest.subscribers_gained || 'unknown'}
-- Channel ID: ${channelId}
+### 🔍 Content Gap Analysis
+Identify 2 topics or formats that similar successful channels use but this channel is missing. Suggest how to adapt them.
 
-**Formatting rules:**
-- Use bold headings as shown above.
-- Each recommendation must be a short paragraph (2‑3 sentences) followed by a bullet list of specific steps.
-- Keep the entire response under 600 words.
-- Be encouraging but honest.
-- If data is sparse (e.g., zero views), focus on foundational advice.
+### 📅 30‑Day Growth Sprint
+Give a day‑by‑day plan for the next 30 days, focusing on: posting schedule, community engagement, and one experimental video idea.
 
-Now generate your response.`;
+### 💡 One "Unfair Advantage" Tactic
+Suggest a creative, low‑cost strategy to stand out (e.g., collaborating with micro‑influencers, using a unique thumbnail style, or repurposing content for Shorts).
 
-        console.log('🤖 Sending structured prompt to Gemini...');
+Formatting:
+- Use bold headings as shown.
+- Use bullet points for lists.
+- Be direct, no fluff.
+- If data is sparse, infer the niche from the channel name or titles.
+
+Now write the blueprint.`;
+
+        console.log('🤖 Sending advanced prompt to Gemini...');
         const model = genAI.getGenerativeModel({ model: "gemma-3-12b-it" });
         const result = await model.generateContent(prompt);
         const recommendations = result.response.text();
@@ -193,15 +220,13 @@ Now generate your response.`;
             data_points_analyzed: history.length,
             total_views: totalViews,
             avg_views: avgViews,
+            channel_name: channelName,
             recommendations: recommendations
         });
 
     } catch (error) {
         console.error('❌ AI Analysis Error:', error);
-        res.status(500).json({
-            error: 'Analysis failed',
-            details: error.message
-        });
+        res.status(500).json({ error: 'Analysis failed', details: error.message });
     }
 });
 

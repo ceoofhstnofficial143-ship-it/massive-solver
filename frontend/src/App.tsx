@@ -143,14 +143,18 @@ function Dashboard() {
         </div>
 
         {/* AI Recommendations */}
-        <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20">
-          <h2 className="text-xl font-semibold text-white mb-4">🧠 AI Growth Recommendations</h2>
-          <div className="prose prose-invert max-w-none text-gray-200 whitespace-pre-wrap leading-relaxed">
+        <div className="bg-white/5 rounded-xl p-6 border border-white/10">
+          <h2 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-400 mb-4">
+            🧠 Growth Blueprint
+          </h2>
+          <div className="prose prose-invert prose-sm max-w-none text-gray-200">
             {recommendations.split('\n').map((line, idx) => {
-              if (line.startsWith('##')) {
-                return <h3 key={idx} className="text-xl font-bold text-purple-300 mt-4 mb-2">{line.replace('##', '').trim()}</h3>;
-              } else if (line.startsWith('-') || line.match(/^\d+\./)) {
-                return <li key={idx} className="ml-4 mb-1 list-disc">{line.replace(/^- /, '')}</li>;
+              if (line.startsWith('###')) {
+                return <h3 key={idx} className="text-lg font-semibold text-purple-300 mt-4 mb-2">{line.replace('###', '').trim()}</h3>;
+              } else if (line.match(/^\d+\./)) {
+                return <div key={idx} className="ml-4 mb-1 text-gray-300">{line}</div>;
+              } else if (line.startsWith('-')) {
+                return <div key={idx} className="ml-6 mb-1 text-gray-300">• {line.substring(1)}</div>;
               } else if (line.trim() === '') {
                 return <div key={idx} className="h-2" />;
               } else {
