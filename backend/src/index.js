@@ -145,27 +145,35 @@ app.get('/analyze', async (req, res) => {
         const latest = history[history.length - 1];
         const channelId = latest.channel_id;
         
+        console.log(`🔍 Starting enrichment for channel: ${channelId}`);
+        
         // Fetch live channel info (name, description) from YouTube API
         let channelName = 'Unknown';
         let channelDescription = '';
         try {
+            console.log('📡 Fetching channel snippet...');
             const channelRes = await axios.get('https://www.googleapis.com/youtube/v3/channels', {
-                params: { part: 'snippet', id: channelId, key: YOUTUBE_API_KEY }
+                params: { part: 'snippet', id: channelId, key: YOUTUBE_API_KEY },
+                timeout: 5000 // 5s limit
             });
             if (channelRes.data.items[0]) {
                 channelName = channelRes.data.items[0].snippet.title;
                 channelDescription = channelRes.data.items[0].snippet.description;
+                console.log(`✅ Found channel: ${channelName}`);
             }
-        } catch (err) { console.log('Could not fetch channel details'); }
+        } catch (err) { console.log('⚠️ Could not fetch channel details:', err.message); }
 
         // Get top 5 videos (for titles and themes)
         let topVideoTitles = [];
         try {
+            console.log('📡 Fetching top video titles...');
             const videosRes = await axios.get('https://www.googleapis.com/youtube/v3/search', {
-                params: { part: 'snippet', channelId, maxResults: 5, order: 'viewCount', type: 'video', key: YOUTUBE_API_KEY }
+                params: { part: 'snippet', channelId, maxResults: 5, order: 'viewCount', type: 'video', key: YOUTUBE_API_KEY },
+                timeout: 5000
             });
             topVideoTitles = videosRes.data.items.map(v => v.snippet.title);
-        } catch (err) { console.log('Could not fetch top videos'); }
+            console.log(`✅ Loaded ${topVideoTitles.length} video titles`);
+        } catch (err) { console.log('⚠️ Could not fetch top videos:', err.message); }
 
         // Calculate averages
         const totalViews = history.reduce((sum, r) => sum + (r.views || 0), 0);

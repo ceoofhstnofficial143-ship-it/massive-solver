@@ -80,10 +80,10 @@ function Dashboard() {
     fetchAI();
   }, []);
 
-  if (loading.stats || loading.ai) {
+  if (loading.stats) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-900 via-purple-900 to-gray-900 flex items-center justify-center">
-        <div className="text-white text-xl">Loading your engine...</div>
+        <div className="text-white text-xl">Loading stats...</div>
       </div>
     );
   }
@@ -143,25 +143,35 @@ function Dashboard() {
         </div>
 
         {/* AI Recommendations */}
-        <div className="bg-white/5 rounded-xl p-6 border border-white/10">
+        <div className="bg-white/5 rounded-xl p-6 border border-white/10 min-h-[300px]">
           <h2 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-400 mb-4">
             🧠 Growth Blueprint
           </h2>
           <div className="prose prose-invert prose-sm max-w-none text-gray-200">
-            {recommendations.split('\n').map((line, idx) => {
-              if (line.startsWith('###')) {
-                return <h3 key={idx} className="text-lg font-semibold text-purple-300 mt-4 mb-2">{line.replace('###', '').trim()}</h3>;
-              } else if (line.match(/^\d+\./)) {
-                return <div key={idx} className="ml-4 mb-1 text-gray-300">{line}</div>;
-              } else if (line.startsWith('-')) {
-                return <div key={idx} className="ml-6 mb-1 text-gray-300">• {line.substring(1)}</div>;
-              } else if (line.trim() === '') {
-                return <div key={idx} className="h-2" />;
-              } else {
-                return <p key={idx} className="mb-2">{line}</p>;
-              }
-            })}
-            {!recommendations && <p>No recommendations yet. Sync your data first.</p>}
+            {loading.ai ? (
+              <div className="animate-pulse space-y-4">
+                <div className="h-4 bg-white/10 rounded w-3/4"></div>
+                <div className="h-4 bg-white/10 rounded w-5/6"></div>
+                <div className="h-4 bg-white/10 rounded w-2/3"></div>
+                <p className="text-purple-300">Strategy engine is thinking...</p>
+              </div>
+            ) : recommendations ? (
+              recommendations.split('\n').map((line, idx) => {
+                if (line.startsWith('###')) {
+                  return <h3 key={idx} className="text-lg font-semibold text-purple-300 mt-4 mb-2">{line.replace('###', '').trim()}</h3>;
+                } else if (line.match(/^\d+\./)) {
+                  return <div key={idx} className="ml-4 mb-1 text-gray-300">{line}</div>;
+                } else if (line.startsWith('-')) {
+                  return <div key={idx} className="ml-6 mb-1 text-gray-300">• {line.substring(1)}</div>;
+                } else if (line.trim() === '') {
+                  return <div key={idx} className="h-2" />;
+                } else {
+                  return <p key={idx} className="mb-2">{line}</p>;
+                }
+              })
+            ) : (
+              <p>No recommendations yet. Sync your data first.</p>
+            )}
           </div>
         </div>
 
