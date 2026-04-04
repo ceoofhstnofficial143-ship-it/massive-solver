@@ -145,8 +145,19 @@ function Dashboard() {
         {/* AI Recommendations */}
         <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20">
           <h2 className="text-xl font-semibold text-white mb-4">🧠 AI Growth Recommendations</h2>
-          <div className="text-gray-200 whitespace-pre-wrap leading-relaxed">
-            {recommendations || 'No recommendations yet. Sync your data first.'}
+          <div className="prose prose-invert max-w-none text-gray-200 whitespace-pre-wrap leading-relaxed">
+            {recommendations.split('\n').map((line, idx) => {
+              if (line.startsWith('##')) {
+                return <h3 key={idx} className="text-xl font-bold text-purple-300 mt-4 mb-2">{line.replace('##', '').trim()}</h3>;
+              } else if (line.startsWith('-') || line.match(/^\d+\./)) {
+                return <li key={idx} className="ml-4 mb-1 list-disc">{line.replace(/^- /, '')}</li>;
+              } else if (line.trim() === '') {
+                return <div key={idx} className="h-2" />;
+              } else {
+                return <p key={idx} className="mb-2">{line}</p>;
+              }
+            })}
+            {!recommendations && <p>No recommendations yet. Sync your data first.</p>}
           </div>
         </div>
 

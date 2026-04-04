@@ -130,52 +130,64 @@ app.get('/analyze', async (req, res) => {
     try {
         console.log('📊 Fetching historical data from Xano...');
         const history = await getHistoricalData();
-
+        
         if (!history || history.length === 0) {
             return res.json({
                 success: true,
-                message: "Not enough data yet. Sync your YouTube stats first using /test/youtube.",
-                data_points_analyzed: 0,
-                recommendations: "Keep uploading content! Once you have more data, I can give you better advice."
+                message: "Not enough data yet. Sync a YouTube channel first.",
+                recommendations: "After syncing, I'll provide personalized growth advice."
             });
         }
 
         console.log(`📈 Found ${history.length} records. Preparing data for AI...`);
 
-        // --- 1. Prepare Your Data for the AI ---
+        // Calculate aggregates
         const totalViews = history.reduce((sum, record) => sum + (record.views || 0), 0);
-        const avgViews = history.length > 0 ? (totalViews / history.length).toFixed(2) : 0;
-        const latestStats = history[history.length - 1];
+        const avgViews = (totalViews / history.length).toFixed(0);
+        const latest = history[history.length - 1];
+        const channelId = latest.channel_id || 'unknown';
 
-        // --- 2. Create an Effective Prompt for the AI ---
+        // Get top performing video from history (by views)
+        const topVideo = history.reduce((best, record) => 
+            (record.top_video_views > best.views) ? { title: record.top_video_title, views: record.top_video_views } : best, 
+            { title: 'None', views: 0 });
+
+        // Structured prompt
         const prompt = `
-You are "Massive Solver", an expert YouTube growth consultant for a small channel.
-Analyze the following channel data and provide 3 specific, actionable recommendations.
-Be encouraging and focus on practical steps a small creator can take.
+You are "Massive Solver", an expert YouTube growth consultant. Your tone is professional, encouraging, and data‑driven.
 
-Channel Data (from the last ${history.length} days of tracking):
-- Channel ID: ${latestStats?.user || 'N/A'}
-- Total Views (All Time): ${totalViews}
-- Average Views Per Tracking Period: ${avgViews}
-- Latest Subscriber Count: ${latestStats?.subscribers_gained || 0}
-- Latest Top Video: "${latestStats?.top_video_title || 'None'}"
+Based on the following channel data, provide **exactly 3 recommendations** under these headings:
 
-Based on this data, provide:
-1.  A content strategy recommendation.
-2.  A recommendation for titles, thumbnails, or SEO.
-3.  A community engagement or promotion tip.
+## 📈 Content Strategy
+(1 actionable idea about what type of videos to make next, based on what's working)
 
-Format the response as a clean list with clear headings.
-        `;
+## 🎯 Title & Thumbnail Optimization
+(1 specific tip to improve click‑through rate, using keywords or design)
 
-        console.log('🤖 Sending data to Gemini for analysis...');
+## 💬 Community & Engagement
+(1 actionable tactic to turn viewers into subscribers)
 
-        // --- 3. Call the Gemini API ---
+**Channel Data:**
+- Total views (all time): ${totalViews}
+- Average views per tracked period: ${avgViews}
+- Best performing video title: "${topVideo.title}" (${topVideo.views} views)
+- Most recent subscriber count (approx): ${latest.subscribers_gained || 'unknown'}
+- Channel ID: ${channelId}
+
+**Formatting rules:**
+- Use bold headings as shown above.
+- Each recommendation must be a short paragraph (2‑3 sentences) followed by a bullet list of specific steps.
+- Keep the entire response under 600 words.
+- Be encouraging but honest.
+- If data is sparse (e.g., zero views), focus on foundational advice.
+
+Now generate your response.`;
+
+        console.log('🤖 Sending structured prompt to Gemini...');
         const model = genAI.getGenerativeModel({ model: "gemma-3-12b-it" });
         const result = await model.generateContent(prompt);
         const recommendations = result.response.text();
 
-        // --- 4. Send the AI's Response Back to Your Frontend ---
         res.json({
             success: true,
             data_points_analyzed: history.length,
