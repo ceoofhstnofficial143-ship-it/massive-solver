@@ -67,9 +67,9 @@ function Dashboard() {
     }
   };
 
-  const fetchAI = async () => {
+  const fetchAI = async (selectedChannelId: string) => {
     try {
-      const res = await axios.get(`${import.meta.env.VITE_API_URL}/analyze`, { timeout: 45000 });
+      const res = await axios.get(`${import.meta.env.VITE_API_URL}/analyze?channelId=${selectedChannelId}`, { timeout: 45000 });
       setRecommendations(res.data.recommendations);
     } catch (err) {
       setError('AI analysis failed');
@@ -82,7 +82,7 @@ function Dashboard() {
     setLoading(prev => ({ ...prev, sync: true }));
     try {
       await axios.post(`${import.meta.env.VITE_API_URL}/api/sync`, { channelId: targetChannelId });
-      await Promise.all([fetchStats(), fetchAI(), fetchHistory()]);
+      await Promise.all([fetchStats(), fetchAI(targetChannelId), fetchHistory()]);
     } catch (err) {
       setError('Sync failed');
     } finally {
@@ -92,7 +92,7 @@ function Dashboard() {
 
   useEffect(() => {
     fetchStats();
-    fetchAI();
+    fetchAI(channelId);
     fetchHistory();
   }, []);
 
@@ -159,7 +159,7 @@ function Dashboard() {
         </div>
 
         {/* View Trends Chart */}
-        <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20 mb-8 h-[350px]">
+        <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20 mb-8 h-[350px] min-h-[350px]">
           <h3 className="text-gray-400 text-sm uppercase mb-4">View Performance Trend</h3>
           {loading.history ? (
             <div className="flex items-center justify-center h-full text-gray-500">Generating chart...</div>

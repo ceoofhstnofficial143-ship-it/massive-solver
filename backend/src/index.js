@@ -5,7 +5,7 @@ const { GoogleGenerativeAI } = require("@google/generative-ai");
 require('dotenv').config();
 
 const app = express();
-app.use(cors());
+app.use(cors({ origin: '*' }));
 app.use(express.json());
 
 // Configuration check
@@ -147,6 +147,7 @@ function setCache(key, data) {
 // NEW: AI Analysis Endpoint
 app.get('/analyze', async (req, res) => {
     try {
+        const { channelId: queryChannelId } = req.query;
         console.log('📊 Fetching historical data from Xano...');
         const history = await getHistoricalData();
         
@@ -160,9 +161,9 @@ app.get('/analyze', async (req, res) => {
 
         console.log(`📈 Found ${history.length} records.`);
 
-        // Get latest record (Sorted by -created_at, so first is newest)
+        // Prioritize query ID, fall back to newest sync record
         const latest = history[0];
-        const channelId = latest.channel_id || CHANNEL_ID;
+        const channelId = queryChannelId || latest.channel_id || CHANNEL_ID;
         
         console.log(`🔍 Starting enrichment for channel: ${channelId}`);
         
