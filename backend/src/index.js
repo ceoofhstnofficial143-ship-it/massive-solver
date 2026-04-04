@@ -206,17 +206,19 @@ app.get('/analyze', async (req, res) => {
 
         // 5. Prepare stats for prompt
         const latest = history[0];
-        const totalViews = history.reduce((sum, r) => sum + (r.views || 0), 0);
-        const avgViews = (totalViews / history.length).toFixed(0);
+        const totalViews = latest.views || 0;
+        const avgViews = (totalViews / (latest.total_videos || 1)).toFixed(0);
 
         // 6. Build the evidence‑driven prompt
         const prompt = `You are "Massive Solver", an elite YouTube growth consultant.
 
+**IMPORTANT:** The stats below are absolute facts. The total views are exactly ${totalViews}. Do not invent, multiply, or hallucinate different numbers. If the numbers seem low, that is the reality—focus on growth from that specific starting point.
+
 **Channel Data:**
 - Channel ID: ${channelId}
-- Total views (tracked): ${totalViews}
+- Total lifetime views: ${totalViews}
 - Average views per video: ${avgViews}
-- Latest subscribers: ${latest.subscribers_gained || 0}
+- Recent subscribers recorded: ${latest.subscribers_gained || 0}
 
 **Video Transcript Excerpts (from top videos):**
 ${transcripts.map(t => t.transcript_text?.substring(0, 500)).join('\n---\n') || 'No transcripts available yet.'}
