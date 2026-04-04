@@ -2,6 +2,9 @@ const express = require('express');
 const axios = require('axios');
 const cors = require('cors');
 const Groq = require('groq-sdk');
+const { getSubtitles } = require('caption-extractor');
+const Sentiment = require('sentiment');
+const sentiment = new Sentiment();
 require('dotenv').config();
 
 const app = express();
@@ -170,7 +173,7 @@ app.get('/analyze', async (req, res) => {
     if (!channelId) return res.status(400).json({ error: 'channelId required' });
 
     try {
-        // Fetch historical data from Xano (same as before)
+        // 1. Fetch historical stats from Xano
         const xanoUrl = `${XANO_BASE_URL}/youtube_analytics?channel_id=${channelId}&_sort=-date&_limit=10`;
         const xanoRes = await axios.get(xanoUrl, {
             headers: { 'Authorization': `Bearer ${XANO_API_KEY}` }
@@ -180,40 +183,64 @@ app.get('/analyze', async (req, res) => {
             return res.json({ success: true, recommendations: "No data yet. Sync this channel first." });
         }
 
-        // Fetch channel name & description (optional but helpful)
-        let channelName = 'Unknown';
-        try {
-            const channelRes = await axios.get('https://www.googleapis.com/youtube/v3/channels', {
-                params: { part: 'snippet', id: channelId, key: YOUTUBE_API_KEY }
-            });
-            if (channelRes.data.items[0]) channelName = channelRes.data.items[0].snippet.title;
-        } catch (err) { console.log('Could not fetch channel name'); }
+        // 2. Fetch transcripts (latest 5)
+        const transcriptsUrl = `${XANO_BASE_URL}/transcripts?channel_id=${channelId}&_sort=-fetched_at&_limit=5`;
+        const transcriptsRes = await axios.get(transcriptsUrl, {
+            headers: { 'Authorization': `Bearer ${XANO_API_KEY}` }
+        });
+        const transcripts = transcriptsRes.data;
 
-        // Prepare data for AI
+        // 3. Fetch comments (latest 100)
+        const commentsUrl = `${XANO_BASE_URL}/comments?channel_id=${channelId}&_sort=-fetched_at&_limit=100`;
+        const commentsRes = await axios.get(commentsUrl, {
+            headers: { 'Authorization': `Bearer ${XANO_API_KEY}` }
+        });
+        const comments = commentsRes.data;
+
+        // 4. Calculate average sentiment
+        let avgSentiment = 0;
+        if (comments.length) {
+            const sum = comments.reduce((acc, c) => acc + (c.sentiment_score || 0), 0);
+            avgSentiment = (sum / comments.length).toFixed(2);
+        }
+
+        // 5. Prepare stats for prompt
         const latest = history[0];
         const totalViews = history.reduce((sum, r) => sum + (r.views || 0), 0);
         const avgViews = (totalViews / history.length).toFixed(0);
 
+        // 6. Build the evidence‑driven prompt
         const prompt = `You are "Massive Solver", an elite YouTube growth consultant.
-Channel: ${channelName} (ID: ${channelId})
-Total views (tracked): ${totalViews}
-Average views per video: ${avgViews}
-Latest subscriber count: ${latest.subscribers_gained || 0}
-Top video: ${latest.top_video_title || 'None'}
 
-Generate a sharp, actionable growth blueprint with:
-1. Performance review (2-3 sentences)
-2. Three content gaps (topics the audience wants but competitors miss)
-3. For each gap, a video idea (title + unique angle)
-Keep it concise and under 500 words.`;
+**Channel Data:**
+- Channel ID: ${channelId}
+- Total views (tracked): ${totalViews}
+- Average views per video: ${avgViews}
+- Latest subscribers: ${latest.subscribers_gained || 0}
 
-        // Call Groq
+**Video Transcript Excerpts (from top videos):**
+${transcripts.map(t => t.transcript_text?.substring(0, 500)).join('\n---\n') || 'No transcripts available yet.'}
+
+**Audience Sentiment Analysis:**
+- Average sentiment score (from -5 to +5): ${avgSentiment}
+- Positive comments example: ${comments.filter(c => c.sentiment_score > 2).slice(0, 2).map(c => c.comment_text).join('; ') || 'None'}
+- Negative comments example: ${comments.filter(c => c.sentiment_score < -2).slice(0, 2).map(c => c.comment_text).join('; ') || 'None'}
+
+**Your Task:**
+Based on the transcripts and sentiment, create a growth blueprint with:
+1. **Content Gaps** – What topics are missing? (Cite evidence from transcripts/comments)
+2. **Tone & Delivery** – How can the creator improve engagement? (Use sentiment clues)
+3. **Three video ideas** – Each with a title, a unique angle, and why it addresses audience feedback.
+
+Be specific. Use quotes or sentiment examples. Keep under 600 words.`;
+
+        // 7. Call Groq
         const chatCompletion = await groq.chat.completions.create({
             messages: [
                 { role: "system", content: "You are a YouTube growth expert. Provide clear, bullet-point advice." },
                 { role: "user", content: prompt }
             ],
-            model: "llama-3.3-70b-versatile", // Free tier, 30 req/min
+            model: "llama-3.3-70b-versatile",
             temperature: 0.5,
             max_tokens: 1024,
         });
@@ -222,12 +249,13 @@ Keep it concise and under 500 words.`;
 
         res.json({
             success: true,
-            channel_name: channelName,
             data_points_analyzed: history.length,
+            total_views: totalViews,
+            avg_views: avgViews,
             recommendations: recommendations
         });
     } catch (error) {
-        console.error('Groq analysis error:', error);
+        console.error('Analysis error:', error);
         res.status(500).json({ error: 'Analysis failed', details: error.message });
     }
 });
@@ -336,6 +364,79 @@ app.get('/test-xano', async (req, res) => {
         res.status(500).json({ error: 'Xano test failed', details: error.message });
     }
 });
+app.post('/api/fetch-comments', async (req, res) => {
+    const { videoId, channelId } = req.body;
+    if (!videoId || !channelId) return res.status(400).json({ error: 'Missing videoId or channelId' });
+
+    try {
+        // Fetch top 100 comments from YouTube API
+        const commentsUrl = `https://www.googleapis.com/youtube/v3/commentThreads?part=snippet&videoId=${videoId}&maxResults=100&key=${YOUTUBE_API_KEY}`;
+        const commentsRes = await axios.get(commentsUrl);
+        const comments = commentsRes.data.items.map(item => ({
+            text: item.snippet.topLevelComment.snippet.textDisplay,
+            likeCount: item.snippet.topLevelComment.snippet.likeCount
+        }));
+
+        // Analyze sentiment for each comment
+        for (const comment of comments) {
+            const result = sentiment.analyze(comment.text);
+            const score = result.score; // range -5 to +5
+
+            // Store in Xano
+            try {
+                await axios.post(`${XANO_BASE_URL}/comments`, {
+                    video_id: videoId,
+                    channel_id: channelId,
+                    comment_text: comment.text,
+                    sentiment_score: score,
+                    analyzed_flag: true,
+                    fetched_at: new Date().toISOString()
+                }, { headers: { 'Authorization': `Bearer ${XANO_API_KEY}` } });
+            } catch (xanoErr) {
+                console.warn(`⚠️ Failed to save comment to Xano: ${xanoErr.message}`);
+            }
+        }
+
+        res.json({ success: true, comment_count: comments.length });
+    } catch (error) {
+        console.error('Comment fetch error:', error.message);
+        res.status(500).json({ error: 'Failed to fetch comments' });
+    }
+});
+
+app.post('/api/fetch-transcript', async (req, res) => {
+    const { videoId, channelId } = req.body;
+    if (!videoId || !channelId) {
+        return res.status(400).json({ error: 'videoId and channelId required' });
+    }
+
+    try {
+        // Fetch transcript using caption-extractor
+        const { subtitles } = await getSubtitles({ videoId, lang: 'en' });
+        const fullTranscript = (subtitles || []).map(segment => segment.text).join(' ');
+
+        if (!fullTranscript) throw new Error('Empty transcript');
+
+        // Save to Xano
+        const xanoUrl = `${XANO_BASE_URL}/transcripts`;
+        const payload = {
+            video_id: videoId,
+            channel_id: channelId,
+            transcript_text: fullTranscript,
+            analyzed_flag: false,
+            fetched_at: new Date().toISOString()
+        };
+        const xanoRes = await axios.post(xanoUrl, payload, {
+            headers: { 'Authorization': `Bearer ${XANO_API_KEY}` }
+        });
+
+        res.json({ success: true, transcript: fullTranscript, xano_record: xanoRes.data });
+    } catch (error) {
+        console.warn(`⚠️ Transcript fetch failed for ${videoId}: ${error.message}`);
+        res.status(500).json({ error: 'Failed to fetch transcript', details: error.message });
+    }
+});
+
 // POST /api/sync – triggers a fresh YouTube sync
 app.post('/api/sync', async (req, res) => {
     const { channelId } = req.body;
@@ -347,6 +448,31 @@ app.post('/api/sync', async (req, res) => {
             return res.status(429).json({ error: 'YouTube quota exceeded. Try again tomorrow.' });
         }
         const xanoData = await syncToXano(youtubeData);
+
+        // After syncing to analytics, extract transcripts for top videos
+        const BACKEND_URL = `http://localhost:${PORT}`;
+        if (youtubeData.top_videos) {
+            for (const video of youtubeData.top_videos) {
+                try {
+                    // Fetch transcript
+                    await axios.post(`${BACKEND_URL}/api/fetch-transcript`, {
+                        videoId: video.id,
+                        channelId: channelId
+                    });
+                    console.log(`✅ Transcript saved for ${video.id}`);
+
+                    // Fetch comments and analyze sentiment
+                    await axios.post(`${BACKEND_URL}/api/fetch-comments`, {
+                        videoId: video.id,
+                        channelId: channelId
+                    });
+                    console.log(`✅ Comments analyzed for ${video.id}`);
+                } catch (err) {
+                    console.warn(`⚠️ Data extraction failed for ${video.id}: ${err.message}`);
+                }
+            }
+        }
+
         res.json({ success: true, xanoData });
     } catch (error) {
         console.error('Sync error:', error.message);
