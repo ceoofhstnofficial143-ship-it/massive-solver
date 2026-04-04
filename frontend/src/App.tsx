@@ -164,7 +164,7 @@ function Dashboard() {
           {loading.history ? (
             <div className="flex items-center justify-center h-full text-gray-500">Generating chart...</div>
           ) : history.length > 1 ? (
-            <ResponsiveContainer width="100%" height="90%">
+            <ResponsiveContainer width="100%" height="90%" minWidth={0}>
               <AreaChart data={history}>
                 <defs>
                   <linearGradient id="colorViews" x1="0" y1="0" x2="0" y2="1">

@@ -75,8 +75,9 @@ async function fetchYouTubeStats(channelId) {
             fetched_at: new Date().toISOString()
         };
     } catch (error) {
-        console.error('YouTube API Error:', error.response?.data || error.message);
-        throw error;
+        console.error('⚠️ YouTube API Error:', error.response?.data || error.message);
+        // Do not re-throw here, let the caller decide
+        return null;
     }
 }
 
@@ -313,24 +314,28 @@ app.get('/api/stats', async (req, res) => {
         
         if (response.data && response.data.length > 0) {
             const latest = response.data[0];
-            // Also fetch live stats from YouTube for this channel
+            // Fetch live stats (falls back to null on quota error)
             const liveStats = await fetchYouTubeStats(channelId);
             res.json({
-                views: latest.views || liveStats.views || 0,
-                subscribers: liveStats.subscribers || 0,
-                videoCount: liveStats.video_count || 0,
+                views: liveStats?.views || latest.views || 0,
+                subscribers: liveStats?.subscribers || 0,
+                videoCount: liveStats?.video_count || 0,
                 topVideo: latest.top_video_title || 'None',
-                lastUpdated: latest.created_at
+                lastUpdated: latest.created_at,
+                source: liveStats ? 'live' : 'history'
             });
         } else {
-            // No historical data, but still fetch live stats
+            // No historical data, try to fetch live stats
             const liveStats = await fetchYouTubeStats(channelId);
+            if (!liveStats) return res.status(429).json({ error: 'YouTube quota exceeded and no history found' });
+
             res.json({
                 views: liveStats.views || 0,
                 subscribers: liveStats.subscribers || 0,
                 videoCount: liveStats.video_count || 0,
                 topVideo: null,
-                lastUpdated: null
+                lastUpdated: null,
+                source: 'live'
             });
         }
     } catch (error) {
