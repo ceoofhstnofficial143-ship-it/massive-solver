@@ -136,7 +136,7 @@ async function syncToXano(data) {
 async function callGeminiWithRetry(prompt, retries = 3) {
     for (let i = 0; i < retries; i++) {
         try {
-            const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+            const model = genAI.getGenerativeModel({ model: "gemma-3-12b-it" });
             const result = await model.generateContent(prompt);
             return result.response.text();
         } catch (err) {
@@ -290,7 +290,7 @@ Output Format: Provide a strategic report with these sections:
 
 Keep it actionable, professional, and under 800 words.`;
 
-        console.log('🤖 Sending enriched blueprint to Gemini 1.5 Flash...');
+        console.log('🤖 Sending enriched blueprint to Gemma 3 12B...');
         const recommendations = await callGeminiWithRetry(prompt);
 
         res.json({
