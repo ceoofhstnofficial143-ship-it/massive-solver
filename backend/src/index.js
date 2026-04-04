@@ -8,6 +8,11 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// Configuration check
+if (!process.env.YOUTUBE_API_KEY) console.error('❌ MISSING YOUTUBE_API_KEY');
+if (!process.env.XANO_API_KEY) console.error('❌ MISSING XANO_API_KEY');
+if (!process.env.GOOGLE_API_KEY) console.error('❌ MISSING GOOGLE_API_KEY');
+
 const PORT = process.env.PORT || 5000;
 
 // Configuration
@@ -155,9 +160,9 @@ app.get('/analyze', async (req, res) => {
 
         console.log(`📈 Found ${history.length} records.`);
 
-        // Get latest record
-        const latest = history[history.length - 1];
-        const channelId = latest.channel_id;
+        // Get latest record (Sorted by -created_at, so first is newest)
+        const latest = history[0];
+        const channelId = latest.channel_id || CHANNEL_ID;
         
         console.log(`🔍 Starting enrichment for channel: ${channelId}`);
         
@@ -208,9 +213,9 @@ app.get('/analyze', async (req, res) => {
             } catch (err) { console.log('⚠️ Could not fetch top videos:', err.message); }
         }
 
-        // Calculate aggregates
-        const totalViews = history.reduce((sum, r) => sum + (r.views || 0), 0);
-        const avgViews = (totalViews / history.length).toFixed(0);
+        // Calculate aggregates from newest record
+        const totalViews = latest.views || 0;
+        const avgViews = (history.reduce((sum, r) => sum + (r.views || 0), 0) / history.length).toFixed(0);
         const totalSubsGained = history.reduce((sum, r) => sum + (r.subscribers_gained || 0), 0);
 
         // Advanced prompt following requested 3-step structure

@@ -58,7 +58,7 @@ function Dashboard() {
 
   const fetchStats = async () => {
     try {
-      const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/stats?channelId=${channelId}`);
+      const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/stats?channelId=${channelId}`, { timeout: 30000 });
       setStats(res.data);
     } catch (err) {
       setError('Failed to load stats');
@@ -69,7 +69,7 @@ function Dashboard() {
 
   const fetchAI = async () => {
     try {
-      const res = await axios.get(`${import.meta.env.VITE_API_URL}/analyze`);
+      const res = await axios.get(`${import.meta.env.VITE_API_URL}/analyze`, { timeout: 45000 });
       setRecommendations(res.data.recommendations);
     } catch (err) {
       setError('AI analysis failed');
