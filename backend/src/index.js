@@ -43,7 +43,7 @@ async function fetchYouTubeStats(channelId) {
         });
 
         const stats = channelRes.data.items[0]?.statistics || {};
-        
+
         const videosRes = await axios.get('https://www.googleapis.com/youtube/v3/search', {
             params: {
                 part: 'snippet',
@@ -79,7 +79,7 @@ async function fetchYouTubeStats(channelId) {
 async function syncToXano(data) {
     try {
         const xanoUrl = `${XANO_BASE_URL}/youtube_analytics`;
-        
+
         const payload = {
             user: 1,
             date: new Date().toISOString().split('T')[0],
@@ -91,16 +91,16 @@ async function syncToXano(data) {
             top_video_title: data.top_videos[0]?.title || '',
             top_video_views: 0
         };
-        
+
         console.log('📤 Sending to Xano:', payload);
-        
+
         const response = await axios.post(xanoUrl, payload, {
             headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${XANO_API_KEY}`
             }
         });
-        
+
         console.log('✅ Xano response:', response.data);
         return response.data;
     } catch (error) {
@@ -109,10 +109,10 @@ async function syncToXano(data) {
     }
 }
 
-// NEW: Fetch historical data from Xano
-async function getHistoricalData() {
+// NEW: Fetch historical data from Xano for a specific channel
+async function getHistoricalData(channelId) {
     try {
-        const xanoUrl = `${XANO_BASE_URL}/youtube_analytics`;
+        const xanoUrl = `${XANO_BASE_URL}/youtube_analytics?channel_id=${channelId}`;
         const response = await axios.get(xanoUrl, {
             headers: {
                 'Authorization': `Bearer ${XANO_API_KEY}`
@@ -127,10 +127,13 @@ async function getHistoricalData() {
 
 // NEW: AI Analysis Endpoint
 app.get('/analyze', async (req, res) => {
+    const { channelId } = req.query;
+    if (!channelId) return res.status(400).json({ error: 'channelId required' });
+    
     try {
-        console.log('📊 Fetching historical data from Xano...');
-        const history = await getHistoricalData();
-        
+        console.log(`📊 Fetching historical data from Xano for ${channelId}...`);
+        const history = await getHistoricalData(channelId);
+
         if (!history || history.length === 0) {
             return res.json({
                 success: true,
@@ -198,50 +201,58 @@ app.get('/test/youtube', async (req, res) => {
     try {
         console.log('Fetching YouTube stats...');
         const youtubeData = await fetchYouTubeStats(CHANNEL_ID);
-        
+
         console.log('Syncing to Xano...');
         const xanoResult = await syncToXano(youtubeData);
-        
-        res.json({ 
+
+        res.json({
             message: 'Data synced successfully',
             youtube_data: youtubeData,
             xano_response: xanoResult
         });
     } catch (error) {
         console.error('Workflow failed:', error.message);
-        res.status(500).json({ 
-            error: 'Sync failed', 
-            details: error.message 
+        res.status(500).json({
+            error: 'Sync failed',
+            details: error.message
         });
     }
 });
 
 // GET /api/stats – returns latest YouTube stats for the current user
 app.get('/api/stats', async (req, res) => {
+    const { channelId } = req.query;
+    if (!channelId) return res.status(400).json({ error: 'channelId required' });
+    
     try {
-        const xanoUrl = `${XANO_BASE_URL}/youtube_analytics?user_id=1&_sort=-date&_limit=1`;
+        // Query Xano for records matching that channel, sorted by latest
+        const xanoUrl = `${XANO_BASE_URL}/youtube_analytics?channel_id=${channelId}&_sort=-created_at&_limit=1`;
         const response = await axios.get(xanoUrl, {
             headers: { 'Authorization': `Bearer ${XANO_API_KEY}` }
         });
         
-        let targetChannelId = CHANNEL_ID; // default
-        let latest = null;
-
         if (response.data && response.data.length > 0) {
-            latest = response.data[0];
-            targetChannelId = latest.channel_id || CHANNEL_ID;
+            const latest = response.data[0];
+            // Also fetch live stats from YouTube for this channel
+            const liveStats = await fetchYouTubeStats(channelId);
+            res.json({
+                views: latest.views || liveStats.views || 0,
+                subscribers: liveStats.subscribers || 0,
+                videoCount: liveStats.video_count || 0,
+                topVideo: latest.top_video_title || 'None',
+                lastUpdated: latest.created_at
+            });
+        } else {
+            // No historical data, but still fetch live stats
+            const liveStats = await fetchYouTubeStats(channelId);
+            res.json({
+                views: liveStats.views || 0,
+                subscribers: liveStats.subscribers || 0,
+                videoCount: liveStats.video_count || 0,
+                topVideo: null,
+                lastUpdated: null
+            });
         }
-
-        console.log(`📊 Fetching LIVE stats for: ${targetChannelId}`);
-        const youtubeStats = await fetchYouTubeStats(targetChannelId); 
-
-        res.json({
-            views: youtubeStats.views, // use live views for accuracy
-            subscribers: youtubeStats.subscribers, 
-            videoCount: youtubeStats.video_count,
-            topVideo: youtubeStats.top_videos[0]?.title || 'None',
-            lastUpdated: latest ? latest.created_at : new Date().toISOString()
-        });
     } catch (error) {
         console.error('Stats error:', error.message);
         res.status(500).json({ error: 'Failed to fetch stats' });
