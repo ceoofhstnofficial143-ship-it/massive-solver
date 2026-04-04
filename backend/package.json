@@ -5,6 +5,7 @@
   "main": "index.js",
   "scripts": {
     "start": "node src/index.js",
+    "dev": "tsx watch src/index.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
@@ -13,13 +14,16 @@
   "type": "commonjs",
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
+    "@supabase/supabase-js": "^2.101.1",
     "axios": "^1.14.0",
+    "caption-extractor": "^2.1.1",
     "cors": "^2.8.6",
     "dotenv": "^17.4.0",
     "express": "^5.2.1",
     "firebase-admin": "^13.7.0",
     "groq-sdk": "^1.1.2",
-    "openai": "^6.33.0"
+    "openai": "^6.33.0",
+    "sentiment": "^5.0.2"
   },
   "devDependencies": {
     "@types/cors": "^2.8.19",
